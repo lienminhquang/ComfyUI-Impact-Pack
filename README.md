@@ -39,7 +39,9 @@ This custom node helps to conveniently enhance images through Detector, Detailer
     * While `batch_masks` may not be completely separated, it provides functionality to perform some level of segmentation.
   * Simple Detector (SEGS) - Operating primarily with `BBOX_DETECTOR`, and with the additional provision of `SAM_MODEL` or `SEGM_DETECTOR`, this node internally generates improved SEGS through mask operations on both *bbox* and *silhouette*. It serves as a convenient tool to simplify a somewhat intricate workflow.
 
-* ControlNetApply (SEGS) - To apply ControlNet in SEGS, you need to use the Preprocessor Provider node from the Inspire Pack to utilize this node.
+* ControlNet
+  * ControlNetApply (SEGS) - To apply ControlNet in SEGS, you need to use the Preprocessor Provider node from the Inspire Pack to utilize this node.
+  * ControlNetClear (SEGS) - Clear applied ControlNet in SEGS 
 
 * Bitwise(SEGS & SEGS) - Performs a 'bitwise and' operation between two SEGS.
 * Bitwise(SEGS - SEGS) - Subtracts one SEGS from another.
@@ -86,15 +88,20 @@ This custom node helps to conveniently enhance images through Detector, Detailer
   * SEGS Filter (range) - This node retrieves only SEGs from SEGS that have a size and position within a certain range.
   * SEGSConcat - Concatenate segs1 and segs2. If source shape of segs1 and segs2 are different from segs2 will be ignored.
   * Picker (SEGS) - Among the input SEGS, you can select a specific SEG through a dialog. If no SEG is selected, it outputs an empty SEGS. Increasing the batch_size of SEGSDetailer can be used for the purpose of selecting from the candidates.
-  * Set Default Image For SEGS - Set a default image for SEGS. SEGS with images set this way do not need to have a fallback image set. When override is set to false, the original image is preserved. 
-  * DecomposeSEGS - Decompose SEGS to allow for detailed manipulation.
-  * AssembleSEGS - Reassemble the decomposed SEGS.
-  * From SEG_ELT - Extract detailed information from SEG_ELT.
-  * Edit SEG_ELT - Modify some of the information in SEG_ELT.
-  * Dilate SEG_ELT - Dilate the mask of SEG_ELT.
+  * Set Default Image For SEGS - Set a default image for SEGS. SEGS with images set this way do not need to have a fallback image set. When override is set to false, the original image is preserved.
+  * Dilate Mask (SEGS) - Dilate/Erosion Mask in SEGS
+  * Gaussian Blur Mask (SEGS) - Apply Gaussian Blur to Mask in SEGS
+  * SEGS_ELT Manipulation - experimental nodes
+    * DecomposeSEGS - Decompose SEGS to allow for detailed manipulation.
+    * AssembleSEGS - Reassemble the decomposed SEGS.
+    * From SEG_ELT - Extract detailed information from SEG_ELT.
+    * Edit SEG_ELT - Modify some of the information in SEG_ELT.
+    * Dilate SEG_ELT - Dilate the mask of SEG_ELT.
 
-* Dilate Mask - Dilate Mask. 
-  * Support erosion for negative value.
+* Mask Manipulation
+  * Dilate Mask - Dilate Mask. 
+    * Support erosion for negative value.
+  * Gaussian Blur Mask - Apply Gaussian Blur to Mask. You can utilize this for mask feathering.
  
 * Pipe nodes
    * ToDetailerPipe, FromDetailerPipe - These nodes are used to bundle multiple inputs used in the detailer, such as models and vae, ..., into a single DETAILER_PIPE or extract the elements that are bundled in the DETAILER_PIPE.
@@ -127,8 +134,9 @@ This custom node helps to conveniently enhance images through Detector, Detailer
   * DenoiseSchedulerDetailerHookProvider - During the progress of the cycle, the detailer's denoise is altered up to the `target_denoise`. 
   * CoreMLDetailerHookProvider - CoreML supports only 512x512, 512x768, 768x512, 768x768 size sampling. CoreMLDetailerHookProvider precisely fixes the upscale of the crop_region to this size. When using this hook, it will always be selected size, regardless of the guide_size. However, if the guide_size is too small, skipping will occur.
   * DetailerHookCombine - This is used to connect two DETAILER_HOOKs. Similar to PixelKSampleHookCombine.
+  * SEGSOrderedFilterDetailerHook, SEGSRangeFilterDetailerHook, SEGSLabelFilterDetailerHook - There are a wrapper node that provides SEGSFilter nodes to be applied in FaceDetailer or Detector by creating DETAILER_HOOK.
 
-* Iterative Upscale (Latent) - The upscaler takes the input upscaler and splits the scale_factor into steps, then iteratively performs upscaling. 
+* Iterative Upscale (Latent/on Pixel Space) - The upscaler takes the input upscaler and splits the scale_factor into steps, then iteratively performs upscaling. 
 This takes latent as input and outputs latent as the result.
 * Iterative Upscale (Image) - The upscaler takes the input upscaler and splits the scale_factor into steps, then iteratively performs upscaling. This takes image as input and outputs image as the result.
   * Internally, this node uses 'Iterative Upscale (Latent)'.
@@ -145,11 +153,17 @@ This takes latent as input and outputs latent as the result.
 * TwoSamplersForMaskUpscalerProvider - This is an Upscaler that extends TwoSamplersForMask to be used in Iterative Upscale.
   * TwoSamplersForMaskUpscalerProviderPipe - pipe version of TwoSamplersForMaskUpscalerProvider.
 
-* PreviewBridge - This custom node can be used with a bridge when using the MaskEditor feature of Clipspace.
-* ImageSender, ImageReceiver - The images generated in ImageSender are automatically sent to the ImageReceiver with the same link_id.
-* LatentSender, LatentReceiver - The latent generated in LatentSender are automatically sent to the LatentReceiver with the same link_id.
-  * Furthermore, LatentSender is implemented with PreviewLatent, which stores the latent in payload form within the image thumbnail.
-  * Due to the current structure of ComfyUI, it is unable to distinguish between SDXL latent and SD1.5/SD2.1 latent. Therefore, it generates thumbnails by decoding them using the SD1.5 method.
+* Image Utils
+  * PreviewBridge (image) - This custom node can be used with a bridge for image when using the MaskEditor feature of Clipspace.
+  * PreviewBridge (latent) - This custom node can be used with a bridge for latent image when using the MaskEditor feature of Clipspace.
+    * If a latent with a mask is provided as input, it displays the mask. Additionally, the mask output provides the mask set in the latent.
+    * If a latent without a mask is provided as input, it outputs the original latent as is, but the mask output provides an output with the entire region set as a mask.
+    * When set mask through MaskEditor, a mask is applied to the latent, and the output includes the stored mask. The same mask is also output as the mask output.
+    * When connected to `vae_opt`, it takes higher priority than the `preview_method`.
+  * ImageSender, ImageReceiver - The images generated in ImageSender are automatically sent to the ImageReceiver with the same link_id.
+  * LatentSender, LatentReceiver - The latent generated in LatentSender are automatically sent to the LatentReceiver with the same link_id.
+    * Furthermore, LatentSender is implemented with PreviewLatent, which stores the latent in payload form within the image thumbnail.
+    * Due to the current structure of ComfyUI, it is unable to distinguish between SDXL latent and SD1.5/SD2.1 latent. Therefore, it generates thumbnails by decoding them using the SD1.5 method.
 
 * Switch nodes
   * Switch (image,mask), Switch (latent), Switch (SEGS) - Among multiple inputs, it selects the input designated by the selector and outputs it. The first input must be provided, while the others are optional. However, if the input specified by the selector is not connected, an error may occur.
@@ -422,3 +436,5 @@ The tile sampler allows high-resolution sampling even in places with low GPU VRA
 BlenderNeok/[ComfyUI_Noise](https://github.com/BlenderNeko/ComfyUI_Noise) - The noise injection feature relies on this function.
 
 WASasquatch/[was-node-suite-comfyui](https://github.com/WASasquatch/was-node-suite-comfyui) - A powerful custom node extensions of ComfyUI.
+
+Trung0246/[ComfyUI-0246](https://github.com/Trung0246/ComfyUI-0246) - Nice bypass hack!

@@ -1,5 +1,6 @@
 import os
 import threading
+import traceback
 
 from aiohttp import web
 
@@ -7,8 +8,11 @@ import impact
 import server
 import folder_paths
 
+import torchvision
+
 import impact.core as core
 import impact.impact_pack as impact_pack
+from impact.utils import to_tensor
 from segment_anything import SamPredictor, sam_model_registry
 import numpy as np
 import nodes
@@ -221,12 +225,12 @@ async def segs_picker(request):
     idx = int(request.rel_url.query.get('idx', ''))
 
     if node_id in segs_picker_map and idx < len(segs_picker_map[node_id]):
-        pil = segs_picker_map[node_id][idx]
+        img = to_tensor(segs_picker_map[node_id][idx]).permute(0, 3, 1, 2).squeeze(0)
+        pil = torchvision.transforms.ToPILImage('RGB')(img)
 
         image_bytes = BytesIO()
         pil.save(image_bytes, format="PNG")
         image_bytes.seek(0)
-
         return web.Response(status=200, body=image_bytes, content_type='image/png', headers={"Content-Disposition": f"filename={node_id}{idx}.png"})
 
     return web.Response(status=400)
@@ -270,33 +274,36 @@ async def view_validate(request):
 
 @server.PromptServer.instance.routes.get("/impact/set/pb_id_image")
 async def set_previewbridge_image(request):
-    if "filename" in request.rel_url.query:
-        node_id = request.rel_url.query["node_id"]
-        filename = request.rel_url.query["filename"]
-        path_type = request.rel_url.query["type"]
-        subfolder = request.rel_url.query["subfolder"]
-        filename, output_dir = folder_paths.annotated_filepath(filename)
+    try:
+        if "filename" in request.rel_url.query:
+            node_id = request.rel_url.query["node_id"]
+            filename = request.rel_url.query["filename"]
+            path_type = request.rel_url.query["type"]
+            subfolder = request.rel_url.query["subfolder"]
+            filename, output_dir = folder_paths.annotated_filepath(filename)
 
-        if filename == '' or filename[0] == '/' or '..' in filename:
-            return web.Response(status=400)
+            if filename == '' or filename[0] == '/' or '..' in filename:
+                return web.Response(status=400)
 
-        if output_dir is None:
-            if path_type == 'input':
-                output_dir = folder_paths.get_input_directory()
-            elif path_type == 'output':
-                output_dir = folder_paths.get_output_directory()
-            else:
-                output_dir = folder_paths.get_temp_directory()
+            if output_dir is None:
+                if path_type == 'input':
+                    output_dir = folder_paths.get_input_directory()
+                elif path_type == 'output':
+                    output_dir = folder_paths.get_output_directory()
+                else:
+                    output_dir = folder_paths.get_temp_directory()
 
-        file = os.path.join(output_dir, subfolder, filename)
-        item = {
-            'filename': filename,
-            'type': path_type,
-            'subfolder': subfolder,
-        }
-        pb_id = core.set_previewbridge_image(node_id, file, item)
+            file = os.path.join(output_dir, subfolder, filename)
+            item = {
+                'filename': filename,
+                'type': path_type,
+                'subfolder': subfolder,
+            }
+            pb_id = core.set_previewbridge_image(node_id, file, item)
 
-        return web.Response(status=200, text=pb_id)
+            return web.Response(status=200, text=pb_id)
+    except Exception:
+        traceback.print_exc()
 
     return web.Response(status=400)
 

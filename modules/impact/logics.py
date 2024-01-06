@@ -248,6 +248,26 @@ class ImpactImageInfo:
         return (value.shape[0], value.shape[1], value.shape[2], value.shape[3])
 
 
+class ImpactLatentInfo:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {"required": {
+                    "value": ("LATENT", ),
+                    },
+                }
+
+    FUNCTION = "doit"
+
+    CATEGORY = "ImpactPack/Logic/_for_test"
+
+    RETURN_TYPES = ("INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("batch", "height", "width", "channel")
+
+    def doit(self, value):
+        shape = value['samples'].shape
+        return (shape[0], shape[2] * 8, shape[3] * 8, shape[1])
+
+
 class ImpactMinMax:
     @classmethod
     def INPUT_TYPES(cls):
@@ -412,7 +432,7 @@ class ImpactSleep:
 
 error_skip_flag = False
 try:
-    import sys
+    import cm_global
     def filter_message(str):
         global error_skip_flag
 
@@ -424,7 +444,7 @@ try:
         else:
             return False
 
-    sys.__comfyui_manager_register_message_collapse(filter_message)
+    cm_global.try_call(api='cm.register_message_collapse', f=filter_message)
 
 except Exception as e:
     print(f"[WARN] ComfyUI-Impact-Pack: `ComfyUI` or `ComfyUI-Manager` is an outdated version.")
@@ -497,6 +517,19 @@ class ImpactControlBridge:
     RETURN_NAMES = ("value",)
     OUTPUT_NODE = True
 
+    @classmethod
+    def IS_CHANGED(self, value, mode, behavior=True, unique_id=None, prompt=None, extra_pnginfo=None):
+        nodes, links = workflow_to_map(extra_pnginfo['workflow'])
+
+        next_nodes = []
+
+        for link in nodes[unique_id]['outputs'][0]['links']:
+            node_id = str(links[link][2])
+            impact.utils.collect_non_reroute_nodes(nodes, links, next_nodes, node_id)
+
+        return next_nodes
+
+
     def doit(self, value, mode, behavior=True, unique_id=None, prompt=None, extra_pnginfo=None):
         global error_skip_flag
 
@@ -508,14 +541,19 @@ class ImpactControlBridge:
 
         for link in nodes[unique_id]['outputs'][0]['links']:
             node_id = str(links[link][2])
-            node_mode = nodes[node_id]['mode']
 
-            if node_mode == 0:
-                active_nodes.append(node_id)
-            elif node_mode == 2:
-                mute_nodes.append(node_id)
-            elif node_mode == 4:
-                bypass_nodes.append(node_id)
+            next_nodes = []
+            impact.utils.collect_non_reroute_nodes(nodes, links, next_nodes, node_id)
+
+            for next_node_id in next_nodes:
+                node_mode = nodes[next_node_id]['mode']
+
+                if node_mode == 0:
+                    active_nodes.append(next_node_id)
+                elif node_mode == 2:
+                    mute_nodes.append(next_node_id)
+                elif node_mode == 4:
+                    bypass_nodes.append(next_node_id)
 
         if mode:
             # active
