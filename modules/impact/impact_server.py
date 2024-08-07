@@ -194,6 +194,12 @@ async def sam_detect(request):
             return web.Response(status=400)
 
 
+@PromptServer.instance.routes.get("/impact/wildcards/refresh")
+async def wildcards_refresh(request):
+    impact.wildcards.wildcard_load()
+    return web.Response(status=200)
+
+
 @PromptServer.instance.routes.get("/impact/wildcards/list")
 async def wildcards_list(request):
     data = {'data': impact.wildcards.get_wildcard_list()}
@@ -548,6 +554,7 @@ def onprompt(json_data):
         gc_preview_bridge_cache(json_data)
         workflow_imagereceiver_update(json_data)
         regional_sampler_seed_update(json_data)
+        core.current_prompt = json_data
     except Exception as e:
         print(f"[WARN] ComfyUI-Impact-Pack: Error on prompt - several features will not work.\n{e}")
 
